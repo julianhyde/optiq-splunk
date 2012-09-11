@@ -19,9 +19,12 @@ package net.hydromatic.optiq.impl.splunk;
 
 import net.hydromatic.optiq.MutableSchema;
 import net.hydromatic.optiq.Schema;
+import net.hydromatic.optiq.impl.jdbc.JdbcSchema;
 import net.hydromatic.optiq.impl.splunk.search.SplunkConnection;
 import net.hydromatic.optiq.jdbc.OptiqConnection;
 import net.hydromatic.optiq.jdbc.UnregisteredDriver;
+
+import org.apache.commons.dbcp.BasicDataSource;
 
 import java.net.URL;
 import java.sql.Connection;
@@ -45,8 +48,8 @@ public class SplunkDriver extends UnregisteredDriver {
     }
 
     @Override
-    public boolean acceptsURL(String url) throws SQLException {
-        return url.startsWith("jdbc:splunk:");
+    protected String getConnectStringPrefix() {
+        return "jdbc:splunk:";
     }
 
     @Override
@@ -61,10 +64,17 @@ public class SplunkDriver extends UnregisteredDriver {
                     "Must specify 'url' property");
             }
             URL url2 = new URL(url1);
-            splunkConnection = new SplunkConnection(
-                url2,
-                info.getProperty("user"),
-                info.getProperty("password"));
+            String user = info.getProperty("user");
+            if (user == null) {
+                throw new IllegalArgumentException(
+                    "Must specify 'user' property");
+            }
+            String password = info.getProperty("password");
+            if (password == null) {
+                throw new IllegalArgumentException(
+                    "Must specify 'password' property");
+            }
+            splunkConnection = new SplunkConnection(url2, user, password);
         } catch (Exception e) {
             throw new SQLException("Cannot connect", e);
         }
@@ -78,6 +88,30 @@ public class SplunkDriver extends UnregisteredDriver {
                 rootSchema.getSubSchemaExpression(
                     schemaName, Schema.class));
         rootSchema.addSchema(schemaName, schema);
+
+        // Include a schema called "mysql" in every splunk connection.
+        // This is a hack for demo purposes. TODO: Add a config file mechanism.
+        if (true) {
+            final String mysqlSchemaName = "mysql";
+            try {
+                Class.forName("com.mysql.jdbc.Driver");
+            } catch (ClassNotFoundException e) {
+                throw new SQLException(e);
+            }
+            BasicDataSource dataSource = new BasicDataSource();
+            dataSource.setUrl("jdbc:mysql://localhost");
+            dataSource.setUsername("foodmart");
+            dataSource.setPassword("foodmart");
+
+            JdbcSchema.create(
+                optiqConnection,
+                optiqConnection.getRootSchema(),
+                dataSource,
+                "foodmart",
+                "",
+                mysqlSchemaName);
+        }
+
         return connection;
     }
 }

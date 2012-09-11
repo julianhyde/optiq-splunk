@@ -211,7 +211,7 @@ public class SplunkPushDownRule
                 if (rn instanceof RexSlot) {
                     RexSlot rs = (RexSlot)rn;
                     rdtf       = bottomFields[rs.getIndex()];
-                } else if (rn instanceof RexLiteral) {
+                } else {
                     rdtf        = dRow[i];
                 }
                 tmp[i++] = rdtf;
@@ -256,10 +256,6 @@ public class SplunkPushDownRule
         RelDataType resultType = new RelRecordType(newFields);
         String searchWithFilter = updateSearchStr.toString();
 
-        String fields =
-            StringUtils.encodeList(getFieldsList(resultType), '|')
-                .toString();
-
         RelNode rel =
             new SplunkTableAccessRel(
                 splunkRel.getCluster(),
@@ -268,11 +264,11 @@ public class SplunkPushDownRule
                 searchWithFilter,
                 splunkRel.earliest,
                 splunkRel.latest,
-                getFieldsList(resultType));
+                RelOptUtil.getFieldNameList(resultType));
 
         LOGGER.fine(
-            "end of appendSearchString fieldNames: " + Arrays.toString(
-                RelOptUtil.getFieldNames(rel.getRowType())));
+            "end of appendSearchString fieldNames: "
+            + RelOptUtil.getFieldNameList(rel.getRowType()));
         return rel;
     }
 
@@ -440,10 +436,6 @@ public class SplunkPushDownRule
 
     public static String getFieldsString(RelDataType row) {
         return Arrays.toString(RelOptUtil.getFieldNames(row));
-    }
-
-    public static List<String> getFieldsList(RelDataType row) {
-        return Arrays.asList(RelOptUtil.getFieldNames(row));
     }
 }
 

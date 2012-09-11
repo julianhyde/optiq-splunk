@@ -24,6 +24,8 @@ import net.hydromatic.optiq.rules.java.EnumerableRelImplementor;
 
 import org.eigenbase.rel.TableAccessRelBase;
 import org.eigenbase.relopt.*;
+import org.eigenbase.reltype.RelDataType;
+import org.eigenbase.reltype.RelDataTypeFactory;
 
 import java.lang.reflect.Constructor;
 import java.util.*;
@@ -73,11 +75,32 @@ public class SplunkTableAccessRel
     }
 
     @Override
+    public void explain(RelOptPlanWriter pw) {
+        pw.explain(
+            this,
+            new String[] { "table", "earliest", "latest", "fieldList" },
+            new Object[] {
+                Arrays.asList(table.getQualifiedName()),
+                earliest, latest, fieldList
+            });
+    }
+
+    @Override
     public void register(RelOptPlanner planner) {
         planner.addRule(SplunkPushDownRule.FILTER);
         planner.addRule(SplunkPushDownRule.FILTER_ON_PROJECT);
         planner.addRule(SplunkPushDownRule.PROJECT);
         planner.addRule(SplunkPushDownRule.PROJECT_ON_FILTER);
+    }
+
+    @Override
+    public RelDataType deriveRowType() {
+        final RelDataTypeFactory.FieldInfoBuilder builder =
+            new RelDataTypeFactory.FieldInfoBuilder();
+        for (String field : fieldList) {
+            builder.add(table.getRowType().getField(field));
+        }
+        return getCluster().getTypeFactory().createStructType(builder);
     }
 
     private static final Constructor CONSTRUCTOR =

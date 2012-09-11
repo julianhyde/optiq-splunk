@@ -45,6 +45,12 @@ The following features are complete.
 * JDBC driver.
 * Basic queries.
 * Rules to push down filter, project and aggregation onto Splunk.
+* JOIN, GROUP BY, ORDER BY in client
+
+Bugs
+====
+
+* COUNT(DISTINCT) gives wrong answer
 
 Backlog
 =======

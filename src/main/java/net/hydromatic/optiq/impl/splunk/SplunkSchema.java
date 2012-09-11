@@ -55,7 +55,8 @@ public class SplunkSchema implements Schema {
             typeFactory.createStructType(
                 new RelDataTypeFactory.FieldInfoBuilder()
                     .add("source", stringType)
-                    .add("sourcetype", stringType));
+                    .add("sourcetype", stringType)
+                    .add("_extra", stringType));
         this.table = new SplunkTable(elementType, this, "splunk");
     }
 

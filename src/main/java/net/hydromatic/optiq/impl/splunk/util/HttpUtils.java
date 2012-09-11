@@ -83,12 +83,16 @@ public class HttpUtils
                 "args should contain an even number of items");
         }
         try {
+            int appended = 0;
             for (int i = 0; i < args.length; i += 2) {
-                if (i != 0) {
-                   out.append("&");
+                if (args[i + 1] == null) {
+                    continue;
                 }
-                out.append(URLEncoder.encode(args[i].toString(), "UTF-8"));
-                out.append("=")
+                if (appended++ > 0) {
+                    out.append("&");
+                }
+                out.append(URLEncoder.encode(args[i].toString(), "UTF-8"))
+                    .append("=")
                     .append(URLEncoder.encode(args[i + 1].toString(), "UTF-8"));
             }
         } catch (UnsupportedEncodingException ignore) {
