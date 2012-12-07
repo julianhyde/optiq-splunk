@@ -34,6 +34,9 @@ import java.util.*;
  * @author jhyde
  */
 public class SplunkSchema implements Schema {
+    /** The name of the one and only table. */
+    public static final String SPLUNK_TABLE_NAME = "splunk";
+
     public final QueryProvider queryProvider;
     public final SplunkConnection splunkConnection;
     private final JavaTypeFactory typeFactory;
@@ -57,7 +60,7 @@ public class SplunkSchema implements Schema {
                     .add("source", stringType)
                     .add("sourcetype", stringType)
                     .add("_extra", stringType));
-        this.table = new SplunkTable(elementType, this, "splunk");
+        this.table = new SplunkTable(elementType, this, SPLUNK_TABLE_NAME);
     }
 
     public Expression getExpression() {
@@ -69,7 +72,7 @@ public class SplunkSchema implements Schema {
     }
 
     public Table getTable(String name) {
-        return name.equals("splunk")
+        return name.equals(SPLUNK_TABLE_NAME)
             ? table
             : null;
     }
@@ -83,11 +86,20 @@ public class SplunkSchema implements Schema {
     }
 
     public <T> Queryable<T> getTable(String name, Class<T> elementType) {
+        //noinspection unchecked
         return getTable(name);
+    }
+
+    public Collection<String> getTableNames() {
+        return Collections.singleton(SPLUNK_TABLE_NAME);
     }
 
     public Schema getSubSchema(String name) {
         return null;
+    }
+
+    public Collection<String> getSubSchemaNames() {
+        return Collections.emptyList();
     }
 }
 

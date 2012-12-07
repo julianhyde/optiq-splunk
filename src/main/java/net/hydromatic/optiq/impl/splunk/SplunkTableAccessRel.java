@@ -19,8 +19,7 @@ package net.hydromatic.optiq.impl.splunk;
 
 import net.hydromatic.linq4j.expressions.*;
 import net.hydromatic.optiq.impl.splunk.search.SplunkConnection;
-import net.hydromatic.optiq.rules.java.EnumerableRel;
-import net.hydromatic.optiq.rules.java.EnumerableRelImplementor;
+import net.hydromatic.optiq.rules.java.*;
 
 import org.eigenbase.rel.TableAccessRelBase;
 import org.eigenbase.relopt.*;
@@ -62,7 +61,7 @@ public class SplunkTableAccessRel
     {
         super(
             cluster,
-            cluster.traitSetOf(CallingConvention.ENUMERABLE),
+            cluster.traitSetOf(JavaRules.CONVENTION),
             table);
         this.splunkTable = splunkTable;
         this.search = search;

@@ -21,8 +21,7 @@ import net.hydromatic.optiq.MutableSchema;
 import net.hydromatic.optiq.Schema;
 import net.hydromatic.optiq.impl.jdbc.JdbcSchema;
 import net.hydromatic.optiq.impl.splunk.search.SplunkConnection;
-import net.hydromatic.optiq.jdbc.OptiqConnection;
-import net.hydromatic.optiq.jdbc.UnregisteredDriver;
+import net.hydromatic.optiq.jdbc.*;
 
 import org.apache.commons.dbcp.BasicDataSource;
 
@@ -47,9 +46,12 @@ public class SplunkDriver extends UnregisteredDriver {
         new SplunkDriver().register();
     }
 
-    @Override
     protected String getConnectStringPrefix() {
         return "jdbc:splunk:";
+    }
+
+    protected DriverVersion createDriverVersion() {
+        return new SplunkDriverVersion();
     }
 
     @Override
