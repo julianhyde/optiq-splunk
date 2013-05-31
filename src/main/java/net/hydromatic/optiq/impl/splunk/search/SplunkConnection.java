@@ -114,6 +114,26 @@ public class SplunkConnection {
     public void getSearchResults(
         String search,
         Map<String, String> otherArgs,
+        List<String> fieldList,
+        SearchResultListener srl)
+    {
+        assert srl != null;
+        Enumerator x = getSearchResults_(search, otherArgs, fieldList, srl);
+        assert x == null;
+    }
+
+    public Enumerator getSearchResultIterator(
+        String search,
+        Map<String, String> otherArgs,
+        List<String> fieldList)
+    {
+        return getSearchResults_(search, otherArgs, fieldList, null);
+    }
+
+    private Enumerator getSearchResults_(
+        String search,
+        Map<String, String> otherArgs,
+        List<String> wantedFields,
         SearchResultListener srl)
     {
         String searchUrl =
@@ -124,7 +144,7 @@ public class SplunkConnection {
                 url.getPort());
 
         StringBuilder data = new StringBuilder();
-        Map<String, String> args = new HashMap<String, String>();
+        Map<String, String> args = new LinkedHashMap<String, String>();
         if (otherArgs != null) {
             args.putAll(otherArgs);
         }
@@ -139,13 +159,21 @@ public class SplunkConnection {
         appendURLEncodedArgs(data, args);
         try {
             // wait at most 30 minutes for first result
-            parseResults(
-                post(searchUrl, data, requestHeaders, 10000, 1800000),
-                srl);
+            InputStream in =
+                post(searchUrl, data, requestHeaders, 10000, 1800000);
+            if (srl == null) {
+                return new SplunkResultIterator(in, wantedFields);
+            } else {
+                parseResults(
+                    in,
+                    srl);
+                return null;
+            }
         } catch (Exception e) {
             StringWriter sw = new StringWriter();
             e.printStackTrace(new PrintWriter(sw));
             LOGGER.warning(e.getMessage() + "\n" + sw);
+            return srl == null ? Linq4j.emptyEnumerator() : null;
         }
     }
 
@@ -290,12 +318,112 @@ public class SplunkConnection {
             new DummySearchResultListener(
                 Boolean.valueOf(argsMap.get("-print")));
         long start = System.currentTimeMillis();
-        c.getSearchResults(search, searchArgs, dummy);
+        c.getSearchResults(search, searchArgs, null, dummy);
 
         System.out.printf(
             "received %d results in %dms\n",
             dummy.getResultCount(),
             (System.currentTimeMillis() - start));
+    }
+
+    private static class SplunkResultIterator implements Enumerator {
+        private final CSVReader csvReader;
+        private String[] fieldNames;
+        private int[] sources;
+        private Object current;
+
+        /**
+         * Where to find the singleton field, or whether to map. Values:
+         *
+         * <ul>
+         * <li>Non-negative The index of the sole field</li>
+         * <li>-1 Generate a singleton null field for every record</li>
+         * <li>-2 Return line intact</li>
+         * <li>-3 Use sources to re-map</li>
+         * </ul>
+         */
+        private int source;
+
+        public SplunkResultIterator(InputStream in, List<String> wantedFields) {
+            csvReader = new CSVReader(new InputStreamReader(in));
+            try {
+                fieldNames = csvReader.readNext();
+                if (fieldNames == null
+                    || fieldNames.length == 0
+                    || fieldNames.length == 1 && fieldNames[0].isEmpty())
+                {
+                } else {
+                    final List<String> headerList = Arrays.asList(fieldNames);
+                    if (wantedFields.size() == 1) {
+                        // Yields 0 or higher if wanted field exists.
+                        // Yields -1 if wanted field does not exist.
+                        source = headerList.indexOf(wantedFields.get(0));
+                        assert source >= -1;
+                        sources = null;
+                    } else if (wantedFields.equals(headerList)) {
+                        source = -2;
+                    } else {
+                        source = -3;
+                        sources = new int[wantedFields.size()];
+                        int i = 0;
+                        for (String wantedField : wantedFields) {
+                            sources[i++] = headerList.indexOf(wantedField);
+                        }
+                    }
+                }
+            } catch (IOException ignore) {
+                StringWriter sw = new StringWriter();
+                ignore.printStackTrace(new PrintWriter(sw));
+                LOGGER.warning(ignore.getMessage() + "\n" + sw);
+            } finally {
+            }
+        }
+
+        public Object current() {
+            return current;
+        }
+
+        public boolean moveNext() {
+            try {
+                String[] line;
+                while ((line = csvReader.readNext()) != null) {
+                    if (line.length == fieldNames.length) {
+                        switch (source) {
+                        case -3:
+                            // Re-map using sources
+                            String[] mapped = new String[sources.length];
+                            for (int i = 0; i < sources.length; i++) {
+                                int source1 = sources[i];
+                                mapped[i] = source1 < 0 ? null : line[source1];
+                            }
+                            this.current = mapped;
+                            break;
+                        case -2:
+                            // Return line as is. No need to re-map.
+                            current = line;
+                            break;
+                        case -1:
+                            // Singleton null
+                            this.current = null;
+                            break;
+                        default:
+                            this.current = line[source];
+                            break;
+                        }
+                        return true;
+                    }
+                }
+            } catch (IOException ignore) {
+                StringWriter sw = new StringWriter();
+                ignore.printStackTrace(new PrintWriter(sw));
+                LOGGER.warning(ignore.getMessage() + "\n" + sw);
+            }
+            return false;
+        }
+
+        public void reset() {
+            throw new UnsupportedOperationException();
+        }
     }
 }
 

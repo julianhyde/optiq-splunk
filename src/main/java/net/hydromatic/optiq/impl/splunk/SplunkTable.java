@@ -25,6 +25,7 @@ import net.hydromatic.optiq.*;
 import org.eigenbase.rel.RelNode;
 import org.eigenbase.relopt.RelOptTable;
 import org.eigenbase.relopt.RelOptUtil;
+import org.eigenbase.reltype.RelDataType;
 
 import java.lang.reflect.Type;
 import java.util.Iterator;
@@ -39,18 +40,22 @@ class SplunkTable<T>
     implements TranslatableTable<T>
 {
     private final Type elementType;
+    private final RelDataType rowType;
     final SplunkSchema schema;
     private final String tableName;
 
     public SplunkTable(
         Type elementType,
+        RelDataType rowType,
         SplunkSchema schema,
         String tableName)
     {
         this.elementType = elementType;
+        this.rowType = rowType;
         this.schema = schema;
         this.tableName = tableName;
         assert elementType != null;
+        assert rowType != null;
         assert schema != null;
         assert tableName != null;
     }
@@ -69,6 +74,10 @@ class SplunkTable<T>
 
     public Type getElementType() {
         return elementType;
+    }
+
+    public RelDataType getRowType() {
+        return rowType;
     }
 
     public Expression getExpression() {

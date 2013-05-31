@@ -26,6 +26,7 @@ import net.hydromatic.optiq.impl.splunk.search.SplunkConnection;
 import org.eigenbase.reltype.RelDataType;
 import org.eigenbase.reltype.RelDataTypeFactory;
 
+import java.lang.reflect.Type;
 import java.util.*;
 
 /**
@@ -54,13 +55,15 @@ public class SplunkSchema implements Schema {
         this.typeFactory = typeFactory;
         this.expression = expression;
         RelDataType stringType = typeFactory.createType(String.class);
-        final RelDataType elementType =
+        final RelDataType rowType =
             typeFactory.createStructType(
                 new RelDataTypeFactory.FieldInfoBuilder()
                     .add("source", stringType)
                     .add("sourcetype", stringType)
                     .add("_extra", stringType));
-        this.table = new SplunkTable(elementType, this, SPLUNK_TABLE_NAME);
+        final Type elementType = typeFactory.getJavaClass(rowType);
+        this.table =
+            new SplunkTable(elementType, rowType, this, SPLUNK_TABLE_NAME);
     }
 
     public Expression getExpression() {

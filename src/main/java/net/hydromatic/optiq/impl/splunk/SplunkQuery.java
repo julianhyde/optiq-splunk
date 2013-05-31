@@ -23,7 +23,6 @@ import net.hydromatic.optiq.impl.splunk.search.*;
 import net.hydromatic.optiq.impl.splunk.util.StringUtils;
 
 import java.util.*;
-import java.util.concurrent.ArrayBlockingQueue;
 
 /**
  * Query against Splunk.
@@ -38,8 +37,7 @@ public class SplunkQuery<T> extends AbstractEnumerable<T>
     private final String latest;
     private final List<String> fieldList;
 
-    private static final Object DUMMY_RECORD = new int[0];
-
+    /** Creates a SplunkQuery. */
     public SplunkQuery(
         SplunkConnection splunkConnection,
         String search,
@@ -65,93 +63,25 @@ public class SplunkQuery<T> extends AbstractEnumerable<T>
     }
 
     public Enumerator<T> enumerator() {
-        final MySearchResultListener<T> listener =
-            new MySearchResultListener<T>(splunkConnection);
-        Thread thread = new Thread(listener);
-        thread.start();
-        return new Enumerator<T>() {
-            boolean done = false;
-            T current;
-
-            public T current() {
-                return current;
-            }
-
-            public boolean moveNext() {
-                if (done) {
-                    return false;
-                }
-                try {
-                    current = listener.queue.take();
-                    if (current == DUMMY_RECORD) {
-                        done = true;
-                        current = null;
-                        return false;
-                    }
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-                return true;
-            }
-
-            public void reset() {
-                throw new UnsupportedOperationException();
-            }
-        };
+        //noinspection unchecked
+        return (Enumerator<T>) splunkConnection.getSearchResultIterator(
+            search, getArgs(), fieldList);
     }
 
-    private class MySearchResultListener<T>
-        implements SearchResultListener, Runnable
-    {
-        private final SplunkConnection splunkConnection;
-        private final ArrayBlockingQueue<T> queue =
-            new ArrayBlockingQueue<T>(100);
-        private String[] fieldNames;
-
-        public MySearchResultListener(
-            SplunkConnection splunkConnection)
-        {
-            this.splunkConnection = splunkConnection;
+    private Map<String, String> getArgs() {
+        Map<String, String> args = new HashMap<String, String>();
+        if (fieldList != null) {
+            String fields =
+                StringUtils.encodeList(fieldList, ',').toString();
+            args.put("field_list", fields);
         }
-
-        public void run() {
-            try {
-                Map<String, String> args = new HashMap<String, String>();
-                if (fieldList != null) {
-                    String fields =
-                        StringUtils.encodeList(fieldList, ',').toString();
-                    args.put("field_list", fields);
-                }
-                if (earliest != null) {
-                    args.put("earliest_time", earliest);
-                }
-                if (latest != null) {
-                    args.put("latest_time", latest);
-                }
-                splunkConnection.getSearchResults(search, args, this);
-            } finally {
-                queue.add((T) DUMMY_RECORD);
-            }
+        if (earliest != null) {
+            args.put("earliest_time", earliest);
         }
-
-        public boolean processSearchResult(String[] fieldValues) {
-            T t;
-            if (fieldNames.length == 1) {
-                t = (T) fieldValues[0];
-            } else {
-                t = (T) fieldValues;
-            }
-            try {
-                queue.put(t);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-            return true;
+        if (latest != null) {
+            args.put("latest_time", latest);
         }
-
-        public void setFieldNames(String[] fieldNames) {
-            this.fieldNames = fieldNames;
-        }
+        return args;
     }
 }
 
