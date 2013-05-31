@@ -75,10 +75,6 @@ public class SplunkSchema implements Schema {
         return expression;
     }
 
-    public Collection<String> getSubSchemaNames() {
-        return Collections.emptyList();
-    }
-
     public Collection<TableInSchema> getTables() {
         return tableList;
     }
@@ -108,10 +104,6 @@ public class SplunkSchema implements Schema {
     public <T> Table<T> getTable(String name, Class<T> elementType) {
         //noinspection unchecked
         return getTable(name);
-    }
-
-    public Collection<String> getTableNames() {
-        return Collections.singleton(SPLUNK_TABLE_NAME);
     }
 
     public Schema getSubSchema(String name) {

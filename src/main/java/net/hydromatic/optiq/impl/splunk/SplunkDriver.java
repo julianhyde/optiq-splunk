@@ -55,20 +55,6 @@ public class SplunkDriver extends UnregisteredDriver {
     }
 
     @Override
-    protected DriverVersion createDriverVersion() {
-        return new DriverVersion(
-            "Splunk JDBC driver (powered by Optiq)",
-            "0.1.1",
-            "optiq-splunk",
-            "0.1.1",
-            true,
-            0,
-            1,
-            0,
-            1);
-    }
-
-    @Override
     public Connection connect(String url, Properties info) throws SQLException {
         Connection connection = super.connect(url, info);
         OptiqConnection optiqConnection = (OptiqConnection) connection;
