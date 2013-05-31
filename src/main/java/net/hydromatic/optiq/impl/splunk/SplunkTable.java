@@ -64,6 +64,10 @@ class SplunkTable<T>
         return "SplunkTable {" + tableName + "}";
     }
 
+    public Statistic getStatistic() {
+        return Statistics.UNKNOWN;
+    }
+
     public QueryProvider getProvider() {
         return schema.queryProvider;
     }

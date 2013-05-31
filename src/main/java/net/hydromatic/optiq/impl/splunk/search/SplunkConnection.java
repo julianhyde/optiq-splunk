@@ -17,6 +17,8 @@
 */
 package net.hydromatic.optiq.impl.splunk.search;
 
+import net.hydromatic.linq4j.Enumerator;
+import net.hydromatic.linq4j.Linq4j;
 import net.hydromatic.optiq.impl.splunk.util.HttpUtils;
 import net.hydromatic.optiq.impl.splunk.util.StringUtils;
 

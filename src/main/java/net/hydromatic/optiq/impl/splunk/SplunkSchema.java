@@ -20,6 +20,7 @@ package net.hydromatic.optiq.impl.splunk;
 import net.hydromatic.linq4j.*;
 import net.hydromatic.linq4j.expressions.Expression;
 import net.hydromatic.optiq.*;
+import net.hydromatic.optiq.impl.TableInSchemaImpl;
 import net.hydromatic.optiq.impl.java.JavaTypeFactory;
 import net.hydromatic.optiq.impl.splunk.search.SplunkConnection;
 
@@ -43,6 +44,7 @@ public class SplunkSchema implements Schema {
     private final JavaTypeFactory typeFactory;
     private final Expression expression;
     private final SplunkTable table;
+    private final List<TableInSchema> tableList;
 
     public SplunkSchema(
         QueryProvider queryProvider,
@@ -64,10 +66,25 @@ public class SplunkSchema implements Schema {
         final Type elementType = typeFactory.getJavaClass(rowType);
         this.table =
             new SplunkTable(elementType, rowType, this, SPLUNK_TABLE_NAME);
+        this.tableList =
+            Collections.<TableInSchema>singletonList(
+                new TableInSchemaImpl(this, "splunk", TableType.TABLE, table));
     }
 
     public Expression getExpression() {
         return expression;
+    }
+
+    public Collection<String> getSubSchemaNames() {
+        return Collections.emptyList();
+    }
+
+    public Collection<TableInSchema> getTables() {
+        return tableList;
+    }
+
+    public JavaTypeFactory getTypeFactory() {
+        return typeFactory;
     }
 
     public List<TableFunction> getTableFunctions(String name) {
@@ -88,7 +105,7 @@ public class SplunkSchema implements Schema {
         return Collections.emptyMap();
     }
 
-    public <T> Queryable<T> getTable(String name, Class<T> elementType) {
+    public <T> Table<T> getTable(String name, Class<T> elementType) {
         //noinspection unchecked
         return getTable(name);
     }

@@ -224,10 +224,10 @@ public class SplunkPushDownRule
             new LinkedList<Pair<String, String>>();
 
         // handle top projection (ie reordering and renaming)
-        RelDataTypeField[] newFields = bottomFields;
+        List<RelDataTypeField> newFields = Arrays.asList(bottomFields);
         if (topProj != null) {
             LOGGER.fine("topProj: " + String.valueOf(topProj.getPermutation()));
-            newFields = new RelDataTypeField[topFields.length];
+            newFields = new ArrayList<RelDataTypeField>();
             int i = 0;
             for (RexNode rn : topProj.getProjectExps()) {
                 RexInputRef rif = (RexInputRef)rn;
@@ -241,7 +241,7 @@ public class SplunkPushDownRule
                             topFields[i].getName()));
                     field = topFields[i];
                 }
-                newFields[i++] = field;
+                newFields.add(field);
             }
         }
 
