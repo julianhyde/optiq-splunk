@@ -112,14 +112,29 @@ public class SplunkTest extends TestCase {
         + "group by \"sourcetype\"\n"
         + "order by c desc\n",
 
+        // group + order
         "select s.\"product_id\", count(\"source\") as c\n"
         + "from \"splunk\".\"splunk\" as s\n"
         + "where s.\"sourcetype\" = 'access_combined_wcookie'\n"
         + "group by s.\"product_id\"\n"
         + "order by c desc\n",
 
+        // non-advertised field
+        "select s.\"sourcetype\", s.\"action\" from \"splunk\".\"splunk\" as s",
+
         "select s.\"source\", s.\"product_id\", s.\"product_name\", s.\"method\"\n"
         + "from \"splunk\".\"splunk\" as s\n"
+        + "where s.\"sourcetype\" = 'access_combined_wcookie'\n",
+
+        "select p.\"product_name\", s.\"action\"\n"
+        + "from \"splunk\".\"splunk\" as s\n"
+        + "  join \"mysql\".\"products\" as p\n"
+        + "on s.\"product_id\" = p.\"product_id\"",
+
+        "select s.\"source\", s.\"product_id\", p.\"product_name\", p.\"price\"\n"
+        + "from \"splunk\".\"splunk\" as s\n"
+        + "    join \"mysql\".\"products\" as p\n"
+        + "    on s.\"product_id\" = p.\"product_id\"\n"
         + "where s.\"sourcetype\" = 'access_combined_wcookie'\n",
     };
 
@@ -131,7 +146,11 @@ public class SplunkTest extends TestCase {
         // referenced
         "select s.\"product_id\", s.\"product_name\", s.\"method\"\n"
         + "from \"splunk\".\"splunk\" as s\n"
-        + "where s.\"sourcetype\" = 'access_combined_wcookie'\n"
+        + "where s.\"sourcetype\" = 'access_combined_wcookie'\n",
+
+        // horrible error if you access a field that doesn't exist
+        "select s.\"sourcetype\", s.\"access\"\n"
+        + "from \"splunk\".\"splunk\" as s\n",
     };
 
     // Fields:
@@ -156,11 +175,11 @@ public class SplunkTest extends TestCase {
 
     public void testSql() throws SQLException {
         checkSql(
-            "select s.\"source\", s.\"product_id\", p.\"product_name\", p.\"price\"\n"
+            "select p.\"product_name\", /*s.\"product_id\",*/ s.\"action\"\n"
             + "from \"splunk\".\"splunk\" as s\n"
-            + "    join \"mysql\".\"products\" as p\n"
-            + "    on s.\"product_id\" = p.\"product_id\"\n"
-            + "where s.\"sourcetype\" = 'access_combined_wcookie'\n");
+            + "join \"mysql\".\"products\" as p\n"
+            + "on s.\"product_id\" = p.\"product_id\"\n"
+            + "where s.\"action\" = 'PURCHASE'");
     }
 
     private void checkSql(String sql) throws SQLException {
