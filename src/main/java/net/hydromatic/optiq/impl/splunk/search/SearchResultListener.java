@@ -20,17 +20,16 @@ package net.hydromatic.optiq.impl.splunk.search;
 /**
  * Called each time a search returns a record.
  */
-public interface SearchResultListener
-{
-    /**
-     * Handles a record from a search result.
-     *
-     * @param fieldValues Values of the record
-     * @return true to continue parsing, false otherwise
-     */
-    boolean processSearchResult(String[] fieldValues);
+public interface SearchResultListener {
+  /**
+   * Handles a record from a search result.
+   *
+   * @param fieldValues Values of the record
+   * @return true to continue parsing, false otherwise
+   */
+  boolean processSearchResult(String[] fieldValues);
 
-    void setFieldNames(String[] fieldNames);
+  void setFieldNames(String[] fieldNames);
 }
 
 // End SearchResultListener.java

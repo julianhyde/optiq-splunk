@@ -37,380 +37,368 @@ import java.util.logging.Logger;
  * Planner rule to push filters and projections to Splunk.
  */
 public class SplunkPushDownRule
-    extends RelOptRule
-{
-    private static final Logger LOGGER =
-        StringUtils.getClassTracer(SplunkPushDownRule.class);
+    extends RelOptRule {
+  private static final Logger LOGGER =
+      StringUtils.getClassTracer(SplunkPushDownRule.class);
 
-    private static final Set<SqlKind> SUPPORTED_OPS =
-        new HashSet<SqlKind>(
-            Arrays.asList(
-                SqlKind.EQUALS,
-                SqlKind.LESS_THAN,
-                SqlKind.LESS_THAN_OR_EQUAL,
-                SqlKind.GREATER_THAN,
-                SqlKind.GREATER_THAN_OR_EQUAL,
-                SqlKind.NOT_EQUALS,
-                SqlKind.LIKE,
-                SqlKind.AND,
-                SqlKind.OR,
-                SqlKind.NOT));
+  private static final Set<SqlKind> SUPPORTED_OPS =
+      new HashSet<SqlKind>(
+          Arrays.asList(
+              SqlKind.EQUALS,
+              SqlKind.LESS_THAN,
+              SqlKind.LESS_THAN_OR_EQUAL,
+              SqlKind.GREATER_THAN,
+              SqlKind.GREATER_THAN_OR_EQUAL,
+              SqlKind.NOT_EQUALS,
+              SqlKind.LIKE,
+              SqlKind.AND,
+              SqlKind.OR,
+              SqlKind.NOT));
 
-    public static final SplunkPushDownRule PROJECT_ON_FILTER =
-        new SplunkPushDownRule(
-            new RelOptRuleOperand(
-                ProjectRel.class,
-                new RelOptRuleOperand(
-                    FilterRel.class,
-                    new RelOptRuleOperand(
-                        ProjectRel.class,
-                        new RelOptRuleOperand(SplunkTableAccessRel.class)))),
-            "proj on filter on proj");
+  public static final SplunkPushDownRule PROJECT_ON_FILTER =
+      new SplunkPushDownRule(
+          new RelOptRuleOperand(
+              ProjectRel.class,
+              new RelOptRuleOperand(
+                  FilterRel.class,
+                  new RelOptRuleOperand(
+                      ProjectRel.class,
+                      new RelOptRuleOperand(SplunkTableAccessRel.class)))),
+          "proj on filter on proj");
 
-    public static final SplunkPushDownRule FILTER_ON_PROJECT =
-        new SplunkPushDownRule(
-            new RelOptRuleOperand(
-                FilterRel.class,
-                new RelOptRuleOperand(
-                    ProjectRel.class,
-                    new RelOptRuleOperand(SplunkTableAccessRel.class))),
-            "filter on proj");
+  public static final SplunkPushDownRule FILTER_ON_PROJECT =
+      new SplunkPushDownRule(
+          new RelOptRuleOperand(
+              FilterRel.class,
+              new RelOptRuleOperand(
+                  ProjectRel.class,
+                  new RelOptRuleOperand(SplunkTableAccessRel.class))),
+          "filter on proj");
 
-    public static final SplunkPushDownRule FILTER =
-        new SplunkPushDownRule(
-            new RelOptRuleOperand(
-                FilterRel.class,
-                new RelOptRuleOperand(SplunkTableAccessRel.class)),
-            "filter");
+  public static final SplunkPushDownRule FILTER =
+      new SplunkPushDownRule(
+          new RelOptRuleOperand(
+              FilterRel.class,
+              new RelOptRuleOperand(SplunkTableAccessRel.class)),
+          "filter");
 
-    public static final SplunkPushDownRule PROJECT =
-        new SplunkPushDownRule(
-            new RelOptRuleOperand(
-                ProjectRel.class,
-                new RelOptRuleOperand(SplunkTableAccessRel.class)),
-            "proj");
+  public static final SplunkPushDownRule PROJECT =
+      new SplunkPushDownRule(
+          new RelOptRuleOperand(
+              ProjectRel.class,
+              new RelOptRuleOperand(SplunkTableAccessRel.class)),
+          "proj");
 
-    /** Creates a SplunkPushDownRule. */
-    protected SplunkPushDownRule(RelOptRuleOperand rule, String id)
-    {
-        super(rule, "SplunkPushDownRule: " + id);
+  /** Creates a SplunkPushDownRule. */
+  protected SplunkPushDownRule(RelOptRuleOperand rule, String id) {
+    super(rule, "SplunkPushDownRule: " + id);
+  }
+
+  // ~ Methods --------------------------------------------------------------
+
+  // implement RelOptRule
+  public void onMatch(RelOptRuleCall call) {
+    LOGGER.fine(description);
+
+    int relLength = call.rels.length;
+    SplunkTableAccessRel splunkRel =
+        (SplunkTableAccessRel) call.rels[relLength - 1];
+
+    FilterRel  filter     = null;
+    ProjectRel topProj    = null;
+    ProjectRel bottomProj = null;
+
+
+    RelDataType topRow = splunkRel.getRowType();
+
+    int filterIdx = 2;
+    if (call.rels[relLength - 2] instanceof ProjectRel) {
+      bottomProj = (ProjectRel)call.rels[relLength - 2];
+      filterIdx  = 3;
+
+      // bottom projection will change the field count/order
+      topRow =  bottomProj.getRowType();
     }
 
-    // ~ Methods --------------------------------------------------------------
+    String filterString = "";
 
-    // implement RelOptRule
-    public void onMatch(RelOptRuleCall call)
-    {
-        LOGGER.fine(description);
+    if (filterIdx <= relLength
+        && call.rels[relLength - filterIdx] instanceof FilterRel) {
+      filter = (FilterRel) call.rels[relLength - filterIdx];
 
-        int relLength = call.rels.length;
-        SplunkTableAccessRel splunkRel =
-            (SplunkTableAccessRel) call.rels[relLength - 1];
+      int topProjIdx = filterIdx + 1;
+      if (topProjIdx <= relLength
+          && call.rels[relLength - topProjIdx] instanceof ProjectRel) {
+        topProj = (ProjectRel)call.rels[relLength - topProjIdx];
+      }
 
-        FilterRel  filter     = null;
-        ProjectRel topProj    = null;
-        ProjectRel bottomProj = null;
+      RexCall filterCall = (RexCall) filter.getCondition();
+      SqlOperator op = filterCall.getOperator();
+      RexNode[] operands = filterCall.getOperands();
 
+      LOGGER.fine("fieldNames: " + getFieldsString(topRow));
 
-        RelDataType topRow = splunkRel.getRowType();
+      filterString =
+          getFilter(op, operands, "", RelOptUtil.getFieldNames(topRow));
 
-        int filterIdx = 2;
-        if (call.rels[relLength - 2] instanceof ProjectRel) {
-            bottomProj = (ProjectRel)call.rels[relLength - 2];
-            filterIdx  = 3;
-
-            // bottom projection will change the field count/order
-            topRow =  bottomProj.getRowType();
-        }
-
-        String filterString = "";
-
-        if (filterIdx <= relLength
-            && call.rels[relLength - filterIdx] instanceof FilterRel)
-        {
-            filter = (FilterRel) call.rels[relLength - filterIdx];
-
-            int topProjIdx = filterIdx + 1;
-            if (topProjIdx <= relLength
-                && call.rels[relLength - topProjIdx] instanceof ProjectRel)
-            {
-                topProj = (ProjectRel)call.rels[relLength - topProjIdx];
-            }
-
-            RexCall filterCall = (RexCall) filter.getCondition();
-            SqlOperator op = filterCall.getOperator();
-            RexNode[] operands = filterCall.getOperands();
-
-            LOGGER.fine("fieldNames: " + getFieldsString(topRow));
-
-            filterString =
-                getFilter(op, operands, "", RelOptUtil.getFieldNames(topRow));
-
-            if (filterString == null) {
-                // can't handle - exit and stop optimizer from calling
-                // any SplunkUdxRel related optimizations
-                transformToFarragoUdxRel(
-                    call, splunkRel,
-                    filter,
-                    topProj,
-                    bottomProj);
-                return;
-            }
-        }
-
-        // top projection will change the field count/order
-        if (topProj != null) {
-            topRow =  topProj.getRowType();
-        }
-        LOGGER.fine("pre transformTo fieldNames: " + getFieldsString(topRow));
-
-        call.transformTo(
-            appendSearchString(
-                filterString, splunkRel, topProj, bottomProj,
-                topRow, null));
+      if (filterString == null) {
+        // can't handle - exit and stop optimizer from calling
+        // any SplunkUdxRel related optimizations
+        transformToFarragoUdxRel(
+            call, splunkRel,
+            filter,
+            topProj,
+            bottomProj);
+        return;
+      }
     }
 
-    /**
-     *
-     * @param toAppend
-     * @param splunkRel
-     * @param topProj
-     * @param bottomProj
-     */
-    protected RelNode appendSearchString(
-        String toAppend,
-        SplunkTableAccessRel splunkRel,
-        ProjectRel topProj,
-        ProjectRel bottomProj,
-        RelDataType topRow,
-        RelDataType bottomRow)
-    {
-        final RexBuilder rexBuilder = splunkRel.getCluster().getRexBuilder();
-        StringBuilder updateSearchStr = new StringBuilder(splunkRel.search);
+    // top projection will change the field count/order
+    if (topProj != null) {
+      topRow =  topProj.getRowType();
+    }
+    LOGGER.fine("pre transformTo fieldNames: " + getFieldsString(topRow));
 
-        if (!toAppend.isEmpty()) {
-            updateSearchStr.append(" ").append(toAppend);
+    call.transformTo(
+        appendSearchString(
+            filterString, splunkRel, topProj, bottomProj,
+            topRow, null));
+  }
+
+  /**
+   *
+   * @param toAppend
+   * @param splunkRel
+   * @param topProj
+   * @param bottomProj
+   */
+  protected RelNode appendSearchString(
+      String toAppend,
+      SplunkTableAccessRel splunkRel,
+      ProjectRel topProj,
+      ProjectRel bottomProj,
+      RelDataType topRow,
+      RelDataType bottomRow) {
+    final RexBuilder rexBuilder = splunkRel.getCluster().getRexBuilder();
+    StringBuilder updateSearchStr = new StringBuilder(splunkRel.search);
+
+    if (!toAppend.isEmpty()) {
+      updateSearchStr.append(" ").append(toAppend);
+    }
+    RelDataTypeField[] bottomFields =
+        bottomRow == null ? null : bottomRow.getFields();
+    RelDataTypeField[] topFields    =
+        topRow    == null ? null : topRow.getFields();
+
+    if (bottomFields == null) {
+      bottomFields = splunkRel.getRowType().getFields();
+    }
+
+    // handle bottom projection (ie choose a subset of the table fields)
+    if (bottomProj != null) {
+      RelDataTypeField[] tmp  =
+          new RelDataTypeField[bottomProj.getProjectExps().length];
+      RelDataTypeField[] dRow = bottomProj.getRowType().getFields();
+      int i = 0;
+      for (RexNode rn : bottomProj.getProjectExps()) {
+        RelDataTypeField rdtf = null;
+        if (rn instanceof RexSlot) {
+          RexSlot rs = (RexSlot)rn;
+          rdtf       = bottomFields[rs.getIndex()];
+        } else {
+          rdtf        = dRow[i];
         }
-        RelDataTypeField[] bottomFields =
-            bottomRow == null ? null : bottomRow.getFields();
-        RelDataTypeField[] topFields    =
-            topRow    == null ? null : topRow.getFields();
+        tmp[i++] = rdtf;
+      }
+      bottomFields = tmp;
+    }
 
-        if (bottomFields == null) {
-            bottomFields = splunkRel.getRowType().getFields();
+    // field renaming: to -> from
+    List<Pair<String, String>> renames =
+        new LinkedList<Pair<String, String>>();
+
+    // handle top projection (ie reordering and renaming)
+    List<RelDataTypeField> newFields = Arrays.asList(bottomFields);
+    if (topProj != null) {
+      LOGGER.fine("topProj: " + String.valueOf(topProj.getPermutation()));
+      newFields = new ArrayList<RelDataTypeField>();
+      int i = 0;
+      for (RexNode rn : topProj.getProjectExps()) {
+        RexInputRef rif = (RexInputRef)rn;
+        RelDataTypeField field = bottomFields[rif.getIndex()];
+        if (!bottomFields[rif.getIndex()].getName()
+            .equals(topFields[i].getName())) {
+          renames.add(
+              new Pair<String, String>(
+                  bottomFields[rif.getIndex()].getName(),
+                  topFields[i].getName()));
+          field = topFields[i];
         }
+        newFields.add(field);
+      }
+    }
 
-        // handle bottom projection (ie choose a subset of the table fields)
-        if (bottomProj != null) {
-            RelDataTypeField[] tmp  =
-                new RelDataTypeField[bottomProj.getProjectExps().length];
-            RelDataTypeField[] dRow = bottomProj.getRowType().getFields();
-            int i = 0;
-            for (RexNode rn : bottomProj.getProjectExps()) {
-                RelDataTypeField rdtf = null;
-                if (rn instanceof RexSlot) {
-                    RexSlot rs = (RexSlot)rn;
-                    rdtf       = bottomFields[rs.getIndex()];
-                } else {
-                    rdtf        = dRow[i];
-                }
-                tmp[i++] = rdtf;
-            }
-            bottomFields = tmp;
-        }
+    if (!renames.isEmpty()) {
+      updateSearchStr.append("| rename ");
+      for (Pair<String, String> p : renames) {
+        updateSearchStr.append(p.left).append(" AS ")
+            .append(p.right).append(" ");
+      }
+    }
 
-        // field renaming: to -> from
-        List<Pair<String, String>> renames =
-            new LinkedList<Pair<String, String>>();
+    RelDataType resultType = new RelRecordType(newFields);
+    String searchWithFilter = updateSearchStr.toString();
 
-        // handle top projection (ie reordering and renaming)
-        List<RelDataTypeField> newFields = Arrays.asList(bottomFields);
-        if (topProj != null) {
-            LOGGER.fine("topProj: " + String.valueOf(topProj.getPermutation()));
-            newFields = new ArrayList<RelDataTypeField>();
-            int i = 0;
-            for (RexNode rn : topProj.getProjectExps()) {
-                RexInputRef rif = (RexInputRef)rn;
-                RelDataTypeField field = bottomFields[rif.getIndex()];
-                if (!bottomFields[rif.getIndex()].getName()
-                    .equals(topFields[i].getName()))
-                {
-                    renames.add(
-                        new Pair<String, String>(
-                            bottomFields[rif.getIndex()].getName(),
-                            topFields[i].getName()));
-                    field = topFields[i];
-                }
-                newFields.add(field);
-            }
-        }
+    RelNode rel =
+        new SplunkTableAccessRel(
+            splunkRel.getCluster(),
+            splunkRel.getTable(),
+            splunkRel.splunkTable,
+            searchWithFilter,
+            splunkRel.earliest,
+            splunkRel.latest,
+            RelOptUtil.getFieldNameList(resultType));
 
-        if (!renames.isEmpty()) {
-            updateSearchStr.append("| rename ");
-            for (Pair<String, String> p : renames) {
-                updateSearchStr.append(p.left).append(" AS ")
-                    .append(p.right).append(" ");
-            }
-        }
-
-        RelDataType resultType = new RelRecordType(newFields);
-        String searchWithFilter = updateSearchStr.toString();
-
-        RelNode rel =
-            new SplunkTableAccessRel(
-                splunkRel.getCluster(),
-                splunkRel.getTable(),
-                splunkRel.splunkTable,
-                searchWithFilter,
-                splunkRel.earliest,
-                splunkRel.latest,
-                RelOptUtil.getFieldNameList(resultType));
-
-        LOGGER.fine(
-            "end of appendSearchString fieldNames: "
+    LOGGER.fine(
+        "end of appendSearchString fieldNames: "
             + RelOptUtil.getFieldNameList(rel.getRowType()));
-        return rel;
+    return rel;
+  }
+
+  // ~ Private Methods ------------------------------------------------------
+  private static RelNode addProjectionRule(ProjectRel proj, RelNode rel) {
+    if (proj == null) {
+      return rel;
+    }
+    return new ProjectRel(
+        proj.getCluster(), rel, proj.getProjectExps(), proj.getRowType(),
+        proj.getFlags(), proj.getCollationList());
+  }
+
+  //TODO: use StringBuilder instead of String
+  //TODO: refactor this to use more tree like parsing, need to also
+  //      make sure we use parens properly - currently precedence
+  //      rules are simply left to right
+  private String getFilter(
+      SqlOperator op,
+      RexNode [] operands,
+      String s,
+      String [] fieldNames) {
+    if (!valid(op.getKind())) {
+      return null;
     }
 
-    // ~ Private Methods ------------------------------------------------------
-    private static RelNode addProjectionRule(ProjectRel proj, RelNode rel) {
-        if (proj == null) {
-            return rel;
+    // NOT op pre-pended
+    if (op.equals(SqlStdOperatorTable.notOperator)) {
+      s = s.concat(" NOT ");
+    }
+
+    for (int i = 0; i < operands.length; i++) {
+      if (operands[i] instanceof RexCall) {
+        s = s.concat("(");
+        s = getFilter(
+            ((RexCall) operands[i]).getOperator(),
+            ((RexCall) operands[i]).getOperands(),
+            s,
+            fieldNames);
+        if (s == null) {
+          return null;
         }
-        return new ProjectRel(
-            proj.getCluster(), rel, proj.getProjectExps(), proj.getRowType(),
-            proj.getFlags(), proj.getCollationList());
-    }
+        s = s.concat(")");
+        if (i != (operands.length - 1)) {
+          s = s.concat(" " + op.toString() + " ");
+        }
+      } else {
+        if (operands.length != 2) {
+          return null;
+        }
+        if (operands[i] instanceof RexInputRef) {
+          if (i != 0) {
+            return null; // must be of form field=value
+          }
 
-    //TODO: use StringBuilder instead of String
-    //TODO: refactor this to use more tree like parsing, need to also
-    //      make sure we use parens properly - currently precedence
-    //      rules are simply left to right
-    private String getFilter(
-        SqlOperator op,
-        RexNode [] operands,
-        String s,
-        String [] fieldNames)
-    {
-        if (!valid(op.getKind())) {
+          int fieldIndex = ((RexInputRef) operands[i]).getIndex();
+          String name = fieldNames[fieldIndex];
+          s = s.concat(name);
+        } else { // RexLiteral
+          RexLiteral lit = (RexLiteral) operands[i];
+
+          String tmp = toString(op, lit);
+          if (tmp == null) {
             return null;
+          }
+          s = s.concat(tmp);
         }
-
-        // NOT op pre-pended
-        if (op.equals(SqlStdOperatorTable.notOperator)) {
-            s = s.concat(" NOT ");
+        if (i == 0) {
+          s = s.concat(toString(op));
         }
+      }
+    }
+    return s;
+  }
 
-        for (int i = 0; i < operands.length; i++) {
-            if (operands[i] instanceof RexCall) {
-                s = s.concat("(");
-                s = getFilter(
-                    ((RexCall) operands[i]).getOperator(),
-                    ((RexCall) operands[i]).getOperands(),
-                    s,
-                    fieldNames);
-                if (s == null) {
-                    return null;
-                }
-                s = s.concat(")");
-                if (i != (operands.length - 1)) {
-                    s = s.concat(" " + op.toString() + " ");
-                }
-            } else {
-                if (operands.length != 2) {
-                    return null;
-                }
-                if (operands[i] instanceof RexInputRef) {
-                    if (i != 0) {
-                        return null; // must be of form field=value
-                    }
+  private boolean valid(SqlKind kind) {
+    return SUPPORTED_OPS.contains(kind);
+  }
 
-                    int fieldIndex = ((RexInputRef) operands[i]).getIndex();
-                    String name = fieldNames[fieldIndex];
-                    s = s.concat(name);
-                } else { // RexLiteral
-                    RexLiteral lit = (RexLiteral) operands[i];
+  private String toString(SqlOperator op) {
+    if (op.equals(SqlStdOperatorTable.likeOperator)) {
+      return SqlStdOperatorTable.equalsOperator.toString();
+    } else if (op.equals(SqlStdOperatorTable.notEqualsOperator)) {
+      return "!=";
+    }
+    return op.toString();
+  }
 
-                    String tmp = toString(op, lit);
-                    if (tmp == null) {
-                        return null;
-                    }
-                    s = s.concat(tmp);
-                }
-                if (i == 0) {
-                    s = s.concat(toString(op));
-                }
-            }
-        }
-        return s;
+  public static String searchEscape(String str) {
+    if (str.isEmpty()) {
+      return "\"\"";
+    }
+    StringBuilder sb = new StringBuilder(str.length());
+    boolean quote = false;
+
+    for (int i = 0; i < str.length(); i++) {
+      char c = str.charAt(i);
+      if (c == '"' || c == '\\') {
+        sb.append('\\');
+      }
+      sb.append(c);
+
+      quote |= !(Character.isLetterOrDigit(c) || c == '_');
     }
 
-    private boolean valid(SqlKind kind) {
-        return SUPPORTED_OPS.contains(kind);
+    if (quote || sb.length() != str.length()) {
+      sb.insert(0, '"');
+      sb.append('"');
+      return sb.toString();
     }
+    return str;
+  }
 
-    private String toString(SqlOperator op)
-    {
-        if (op.equals(SqlStdOperatorTable.likeOperator)) {
-            return SqlStdOperatorTable.equalsOperator.toString();
-        } else if (op.equals(SqlStdOperatorTable.notEqualsOperator)) {
-            return "!=";
-        }
-        return op.toString();
+  private String toString(SqlOperator op, RexLiteral literal) {
+    String value = null;
+    SqlTypeName litSqlType = literal.getTypeName();
+    if (Arrays.asList(SqlTypeName.numericTypes).contains(litSqlType)) {
+      value = literal.getValue().toString();
+    } else if (litSqlType.equals(SqlTypeName.CHAR)) {
+      value = ((NlsString) literal.getValue()).getValue().toString();
+      if (op.equals(SqlStdOperatorTable.likeOperator)) {
+        value = value.replaceAll("%", "*");
+      }
+      value = searchEscape(value);
     }
+    return value;
+  }
 
-    public static String searchEscape(String str)
-    {
-        if (str.isEmpty()) {
-            return "\"\"";
-        }
-        StringBuilder sb = new StringBuilder(str.length());
-        boolean quote = false;
-
-        for (int i = 0; i < str.length(); i++) {
-            char c = str.charAt(i);
-            if (c == '"' || c == '\\') {
-                sb.append('\\');
-            }
-            sb.append(c);
-
-            quote |= !(Character.isLetterOrDigit(c) || c == '_');
-        }
-
-        if (quote || sb.length() != str.length()) {
-            sb.insert(0, '"');
-            sb.append('"');
-            return sb.toString();
-        }
-        return str;
-    }
-
-    private String toString(SqlOperator op, RexLiteral literal)
-    {
-        String value = null;
-        SqlTypeName litSqlType = literal.getTypeName();
-        if (Arrays.asList(SqlTypeName.numericTypes).contains(litSqlType)) {
-            value = literal.getValue().toString();
-        } else if (litSqlType.equals(SqlTypeName.CHAR)) {
-            value = ((NlsString) literal.getValue()).getValue().toString();
-            if (op.equals(SqlStdOperatorTable.likeOperator)) {
-                value = value.replaceAll("%", "*");
-            }
-            value = searchEscape(value);
-        }
-        return value;
-    }
-
-    // transform the call from SplunkUdxRel to FarragoJavaUdxRel
-    // usually used to stop the optimizer from calling us
-    protected void transformToFarragoUdxRel(
-        RelOptRuleCall call,
-        SplunkTableAccessRel splunkRel,
-        FilterRel filter,
-        ProjectRel topProj,
-        ProjectRel bottomProj)
-    {
-        assert false;
+  // transform the call from SplunkUdxRel to FarragoJavaUdxRel
+  // usually used to stop the optimizer from calling us
+  protected void transformToFarragoUdxRel(
+      RelOptRuleCall call,
+      SplunkTableAccessRel splunkRel,
+      FilterRel filter,
+      ProjectRel topProj,
+      ProjectRel bottomProj) {
+    assert false;
 /*
         RelNode rel =
             new JavaRules.EnumerableTableAccessRel(
@@ -432,11 +420,11 @@ public class SplunkPushDownRule
 
         call.transformTo(rel);
         */
-    }
+  }
 
-    public static String getFieldsString(RelDataType row) {
-        return Arrays.toString(RelOptUtil.getFieldNames(row));
-    }
+  public static String getFieldsString(RelDataType row) {
+    return Arrays.toString(RelOptUtil.getFieldNames(row));
+  }
 }
 
 // End SplunkPushDownRule.java

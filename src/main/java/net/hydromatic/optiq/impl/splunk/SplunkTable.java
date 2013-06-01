@@ -32,99 +32,94 @@ import java.util.Iterator;
 
 /**
  * Table based on Splunk.
- *
- * @author jhyde
  */
 class SplunkTable<T>
     extends AbstractQueryable<T>
-    implements TranslatableTable<T>
-{
-    private final Type elementType;
-    private final RelDataType rowType;
-    final SplunkSchema schema;
-    private final String tableName;
+    implements TranslatableTable<T> {
+  private final Type elementType;
+  private final RelDataType rowType;
+  final SplunkSchema schema;
+  private final String tableName;
 
-    public SplunkTable(
-        Type elementType,
-        RelDataType rowType,
-        SplunkSchema schema,
-        String tableName)
-    {
-        this.elementType = elementType;
-        this.rowType = rowType;
-        this.schema = schema;
-        this.tableName = tableName;
-        assert elementType != null;
-        assert rowType != null;
-        assert schema != null;
-        assert tableName != null;
-    }
+  public SplunkTable(
+      Type elementType,
+      RelDataType rowType,
+      SplunkSchema schema,
+      String tableName) {
+    this.elementType = elementType;
+    this.rowType = rowType;
+    this.schema = schema;
+    this.tableName = tableName;
+    assert elementType != null;
+    assert rowType != null;
+    assert schema != null;
+    assert tableName != null;
+  }
 
-    public String toString() {
-        return "SplunkTable {" + tableName + "}";
-    }
+  public String toString() {
+    return "SplunkTable {" + tableName + "}";
+  }
 
-    public Statistic getStatistic() {
-        return Statistics.UNKNOWN;
-    }
+  public Statistic getStatistic() {
+    return Statistics.UNKNOWN;
+  }
 
-    public QueryProvider getProvider() {
-        return schema.queryProvider;
-    }
+  public QueryProvider getProvider() {
+    return schema.queryProvider;
+  }
 
-    public DataContext getDataContext() {
-        return schema;
-    }
+  public DataContext getDataContext() {
+    return schema;
+  }
 
-    public Type getElementType() {
-        return elementType;
-    }
+  public Type getElementType() {
+    return elementType;
+  }
 
-    public RelDataType getRowType() {
-        return rowType;
-    }
+  public RelDataType getRowType() {
+    return rowType;
+  }
 
-    public Expression getExpression() {
-        return Expressions.call(
-            schema.getExpression(),
-            "getTable",
-            Expressions.<Expression>list()
-                .append(Expressions.constant(tableName))
-                .appendIf(
-                    elementType instanceof Class,
-                    Expressions.constant(elementType)));
-    }
+  public Expression getExpression() {
+    return Expressions.call(
+        schema.getExpression(),
+        "getTable",
+        Expressions.<Expression>list()
+            .append(Expressions.constant(tableName))
+            .appendIf(
+                elementType instanceof Class,
+                Expressions.constant(elementType)));
+  }
 
-    public Iterator<T> iterator() {
-        return createQuery().iterator();
-    }
+  public Iterator<T> iterator() {
+    return createQuery().iterator();
+  }
 
-    public Enumerator<T> enumerator() {
-        return createQuery().enumerator();
-    }
+  public Enumerator<T> enumerator() {
+    return createQuery().enumerator();
+  }
 
-    private SplunkQuery<T> createQuery() {
-        return new SplunkQuery<T>(
-            schema.splunkConnection,
-            "search",
-            null,
-            null,
-            null);
-    }
+  private SplunkQuery<T> createQuery() {
+    return new SplunkQuery<T>(
+        schema.splunkConnection,
+        "search",
+        null,
+        null,
+        null);
+  }
 
-    public RelNode toRel(
-        RelOptTable.ToRelContext context,
-        RelOptTable relOptTable)
-    {
-        return new SplunkTableAccessRel(
-            context.getCluster(),
-            relOptTable,
-            this,
-            "search",
-            null,
-            null,
-            RelOptUtil.getFieldNameList(relOptTable.getRowType()));
-    }
+  public RelNode toRel(
+      RelOptTable.ToRelContext context,
+      RelOptTable relOptTable) {
+    return new SplunkTableAccessRel(
+        context.getCluster(),
+        relOptTable,
+        this,
+        "search",
+        null,
+        null,
+        RelOptUtil.getFieldNameList(relOptTable.getRowType()));
+  }
 }
 
 // End SplunkTable.java

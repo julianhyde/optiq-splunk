@@ -23,19 +23,19 @@ import net.hydromatic.optiq.jdbc.DriverVersion;
  * Version information for Optiq JDBC Driver for Splunk.
  */
 class SplunkDriverVersion extends DriverVersion {
-    /** Creates an OptiqDriverVersion. */
-    SplunkDriverVersion() {
-        super(
-            "Optiq JDBC Driver for Splunk",
-            "0.2",
-            "Optiq-Splunk",
-            "0.2",
-            true,
-            0,
-            1,
-            0,
-            1);
-    }
+  /** Creates an OptiqDriverVersion. */
+  SplunkDriverVersion() {
+    super(
+        "Optiq JDBC Driver for Splunk",
+        "0.2",
+        "Optiq-Splunk",
+        "0.2",
+        true,
+        0,
+        1,
+        0,
+        1);
+  }
 }
 
 // End SplunkDriverVersion.java

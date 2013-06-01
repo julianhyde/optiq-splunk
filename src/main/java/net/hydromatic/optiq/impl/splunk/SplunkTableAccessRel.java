@@ -38,123 +38,119 @@ import java.util.*;
  * columns (Splunk calls them "fields") but each query specifies the fields that
  * it wants. It also specifies a search expression, and optionally earliest &
  * latest dates.</p>
- *
- * @author jhyde
  */
 public class SplunkTableAccessRel
     extends TableAccessRelBase
-    implements EnumerableRel
-{
-    final SplunkTable splunkTable;
-    final String search;
-    final String earliest;
-    final String latest;
-    final List<String> fieldList;
-    private final PhysType physType;
+    implements EnumerableRel {
+  final SplunkTable splunkTable;
+  final String search;
+  final String earliest;
+  final String latest;
+  final List<String> fieldList;
+  private final PhysType physType;
 
-    protected SplunkTableAccessRel(
-        RelOptCluster cluster,
-        RelOptTable table,
-        SplunkTable splunkTable,
-        String search,
-        String earliest,
-        String latest,
-        List<String> fieldList)
-    {
-        super(
-            cluster,
-            cluster.traitSetOf(EnumerableConvention.ARRAY),
-            table);
-        this.splunkTable = splunkTable;
-        this.search = search;
-        this.earliest = earliest;
-        this.latest = latest;
-        this.fieldList = fieldList;
-        this.physType =
-            PhysTypeImpl.of(
-                (JavaTypeFactory) cluster.getTypeFactory(),
-                getRowType(),
-                (EnumerableConvention) getConvention());
+  protected SplunkTableAccessRel(
+      RelOptCluster cluster,
+      RelOptTable table,
+      SplunkTable splunkTable,
+      String search,
+      String earliest,
+      String latest,
+      List<String> fieldList) {
+    super(
+        cluster,
+        cluster.traitSetOf(EnumerableConvention.ARRAY),
+        table);
+    this.splunkTable = splunkTable;
+    this.search = search;
+    this.earliest = earliest;
+    this.latest = latest;
+    this.fieldList = fieldList;
+    this.physType =
+        PhysTypeImpl.of(
+            (JavaTypeFactory) cluster.getTypeFactory(),
+            getRowType(),
+            (EnumerableConvention) getConvention());
 
-        assert splunkTable != null;
-        assert search != null;
+    assert splunkTable != null;
+    assert search != null;
+  }
+
+  public PhysType getPhysType() {
+    return physType;
+  }
+
+  @Override
+  public RelOptPlanWriter explainTerms(RelOptPlanWriter pw) {
+    return super.explainTerms(pw)
+        .item("table", Arrays.asList(table.getQualifiedName()))
+        .item("earliest", earliest)
+        .item("latest", latest)
+        .item("fieldList", fieldList);
+  }
+
+  @Override
+  public void register(RelOptPlanner planner) {
+    planner.addRule(SplunkPushDownRule.FILTER);
+    planner.addRule(SplunkPushDownRule.FILTER_ON_PROJECT);
+    planner.addRule(SplunkPushDownRule.PROJECT);
+    planner.addRule(SplunkPushDownRule.PROJECT_ON_FILTER);
+  }
+
+  @Override
+  public RelDataType deriveRowType() {
+    final RelDataTypeFactory.FieldInfoBuilder builder =
+        new RelDataTypeFactory.FieldInfoBuilder();
+    for (String field : fieldList) {
+      builder.add(table.getRowType().getField(field));
     }
+    return getCluster().getTypeFactory().createStructType(builder);
+  }
 
-    public PhysType getPhysType() {
-        return physType;
-    }
+  private static final Constructor CONSTRUCTOR =
+      Types.lookupConstructor(
+          SplunkQuery.class,
+          SplunkConnection.class,
+          String.class,
+          String.class,
+          String.class,
+          List.class);
 
-    @Override
-    public RelOptPlanWriter explainTerms(RelOptPlanWriter pw) {
-        return super.explainTerms(pw)
-            .item("table", Arrays.asList(table.getQualifiedName()))
-            .item("earliest", earliest)
-            .item("latest", latest)
-            .item("fieldList", fieldList);
-    }
+  public BlockExpression implement(EnumerableRelImplementor implementor) {
+    Expression expression =
+        Expressions.new_(
+            CONSTRUCTOR,
+            Expressions.field(
+                Types.castIfNecessary(
+                    SplunkSchema.class, splunkTable.schema.getExpression()),
+                "splunkConnection"),
+            Expressions.constant(search),
+            Expressions.constant(earliest),
+            Expressions.constant(latest),
+            fieldList == null
+                ? Expressions.constant(null)
+                : constantStringList(fieldList));
+    return Blocks.toBlock(expression);
+  }
 
-    @Override
-    public void register(RelOptPlanner planner) {
-        planner.addRule(SplunkPushDownRule.FILTER);
-        planner.addRule(SplunkPushDownRule.FILTER_ON_PROJECT);
-        planner.addRule(SplunkPushDownRule.PROJECT);
-        planner.addRule(SplunkPushDownRule.PROJECT_ON_FILTER);
-    }
+  private static Expression constantStringList(final List<String> strings) {
+    return Expressions.call(
+        Arrays.class,
+        "asList",
+        Expressions.newArrayInit(
+            Object.class,
+            new AbstractList<Expression>() {
+              @Override
+              public Expression get(int index) {
+                return Expressions.constant(strings.get(index));
+              }
 
-    @Override
-    public RelDataType deriveRowType() {
-        final RelDataTypeFactory.FieldInfoBuilder builder =
-            new RelDataTypeFactory.FieldInfoBuilder();
-        for (String field : fieldList) {
-            builder.add(table.getRowType().getField(field));
-        }
-        return getCluster().getTypeFactory().createStructType(builder);
-    }
-
-    private static final Constructor CONSTRUCTOR =
-        Types.lookupConstructor(
-            SplunkQuery.class,
-            SplunkConnection.class,
-            String.class,
-            String.class,
-            String.class,
-            List.class);
-
-    public BlockExpression implement(EnumerableRelImplementor implementor) {
-        Expression expression =
-            Expressions.new_(
-                CONSTRUCTOR,
-                Expressions.field(
-                    Types.castIfNecessary(
-                        SplunkSchema.class, splunkTable.schema.getExpression()),
-                    "splunkConnection"),
-                Expressions.constant(search),
-                Expressions.constant(earliest),
-                Expressions.constant(latest),
-                fieldList == null
-                    ? Expressions.constant(null)
-                    : constantStringList(fieldList));
-        return Blocks.toBlock(expression);
-    }
-
-    private static Expression constantStringList(final List<String> strings) {
-        return Expressions.call(
-            Arrays.class,
-            "asList",
-            Expressions.newArrayInit(
-                Object.class,
-                new AbstractList<Expression>() {
-                    @Override
-                    public Expression get(int index) {
-                        return Expressions.constant(strings.get(index));
-                    }
-
-                    @Override
-                    public int size() {
-                        return strings.size();
-                    }
-                }));
-    }
+              @Override
+              public int size() {
+                return strings.size();
+              }
+            }));
+  }
 }
 
 // End SplunkTableAccessRel.java

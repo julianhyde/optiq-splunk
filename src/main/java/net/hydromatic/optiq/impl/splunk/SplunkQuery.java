@@ -26,63 +26,59 @@ import java.util.*;
 
 /**
  * Query against Splunk.
- *
- * @author jhyde
  */
-public class SplunkQuery<T> extends AbstractEnumerable<T>
-{
-    private final SplunkConnection splunkConnection;
-    private final String search;
-    private final String earliest;
-    private final String latest;
-    private final List<String> fieldList;
+public class SplunkQuery<T> extends AbstractEnumerable<T> {
+  private final SplunkConnection splunkConnection;
+  private final String search;
+  private final String earliest;
+  private final String latest;
+  private final List<String> fieldList;
 
-    /** Creates a SplunkQuery. */
-    public SplunkQuery(
-        SplunkConnection splunkConnection,
-        String search,
-        String earliest,
-        String latest,
-        List<String> fieldList)
-    {
-        this.splunkConnection = splunkConnection;
-        this.search = search;
-        this.earliest = earliest;
-        this.latest = latest;
-        this.fieldList = fieldList;
-        assert splunkConnection != null;
-        assert search != null;
-    }
+  /** Creates a SplunkQuery. */
+  public SplunkQuery(
+      SplunkConnection splunkConnection,
+      String search,
+      String earliest,
+      String latest,
+      List<String> fieldList) {
+    this.splunkConnection = splunkConnection;
+    this.search = search;
+    this.earliest = earliest;
+    this.latest = latest;
+    this.fieldList = fieldList;
+    assert splunkConnection != null;
+    assert search != null;
+  }
 
-    public String toString() {
-        return "SplunkQuery {" + search + "}";
-    }
+  public String toString() {
+    return "SplunkQuery {" + search + "}";
+  }
 
-    public Iterator<T> iterator() {
-        return Linq4j.enumeratorIterator(enumerator());
-    }
+  public Iterator<T> iterator() {
+    return Linq4j.enumeratorIterator(enumerator());
+  }
 
-    public Enumerator<T> enumerator() {
-        //noinspection unchecked
-        return (Enumerator<T>) splunkConnection.getSearchResultIterator(
-            search, getArgs(), fieldList);
-    }
+  public Enumerator<T> enumerator() {
+    //noinspection unchecked
+    return (Enumerator<T>) splunkConnection.getSearchResultIterator(
+        search, getArgs(), fieldList);
+  }
 
-    private Map<String, String> getArgs() {
-        Map<String, String> args = new HashMap<String, String>();
-        if (fieldList != null) {
-            String fields =
-                StringUtils.encodeList(fieldList, ',').toString();
-            args.put("field_list", fields);
-        }
-        if (earliest != null) {
-            args.put("earliest_time", earliest);
-        }
-        if (latest != null) {
-            args.put("latest_time", latest);
-        }
-        return args;
+  private Map<String, String> getArgs() {
+    Map<String, String> args = new HashMap<String, String>();
+    if (fieldList != null) {
+      String fields =
+          StringUtils.encodeList(fieldList, ',').toString();
+      args.put("field_list", fields);
     }
+    if (earliest != null) {
+      args.put("earliest_time", earliest);
+    }
+    if (latest != null) {
+      args.put("latest_time", latest);
+    }
+    return args;
+  }
 }
 
 // End SplunkQuery.java
