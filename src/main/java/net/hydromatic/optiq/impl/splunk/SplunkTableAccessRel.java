@@ -18,7 +18,7 @@
 package net.hydromatic.optiq.impl.splunk;
 
 import net.hydromatic.linq4j.expressions.*;
-import net.hydromatic.optiq.impl.java.JavaTypeFactory;
+
 import net.hydromatic.optiq.impl.splunk.search.SplunkConnection;
 import net.hydromatic.optiq.rules.java.*;
 
@@ -47,7 +47,6 @@ public class SplunkTableAccessRel
   final String earliest;
   final String latest;
   final List<String> fieldList;
-  private final PhysType physType;
 
   protected SplunkTableAccessRel(
       RelOptCluster cluster,
@@ -59,31 +58,22 @@ public class SplunkTableAccessRel
       List<String> fieldList) {
     super(
         cluster,
-        cluster.traitSetOf(EnumerableConvention.ARRAY),
+        cluster.traitSetOf(EnumerableConvention.INSTANCE),
         table);
     this.splunkTable = splunkTable;
     this.search = search;
     this.earliest = earliest;
     this.latest = latest;
     this.fieldList = fieldList;
-    this.physType =
-        PhysTypeImpl.of(
-            (JavaTypeFactory) cluster.getTypeFactory(),
-            getRowType(),
-            (EnumerableConvention) getConvention());
 
     assert splunkTable != null;
     assert search != null;
   }
 
-  public PhysType getPhysType() {
-    return physType;
-  }
-
   @Override
   public RelOptPlanWriter explainTerms(RelOptPlanWriter pw) {
     return super.explainTerms(pw)
-        .item("table", Arrays.asList(table.getQualifiedName()))
+        .item("table", table.getQualifiedName())
         .item("earliest", earliest)
         .item("latest", latest)
         .item("fieldList", fieldList);
@@ -116,21 +106,28 @@ public class SplunkTableAccessRel
           String.class,
           List.class);
 
-  public BlockExpression implement(EnumerableRelImplementor implementor) {
-    Expression expression =
-        Expressions.new_(
-            CONSTRUCTOR,
-            Expressions.field(
-                Types.castIfNecessary(
-                    SplunkSchema.class, splunkTable.schema.getExpression()),
-                "splunkConnection"),
-            Expressions.constant(search),
-            Expressions.constant(earliest),
-            Expressions.constant(latest),
-            fieldList == null
-                ? Expressions.constant(null)
-                : constantStringList(fieldList));
-    return Blocks.toBlock(expression);
+  public Result implement(EnumerableRelImplementor implementor, Prefer pref) {
+    final PhysType physType =
+        PhysTypeImpl.of(
+            implementor.getTypeFactory(),
+            getRowType(),
+            pref.preferCustom());
+    final BlockBuilder builder = new BlockBuilder();
+    return implementor.result(
+        physType,
+        builder.append(
+            Expressions.new_(
+                CONSTRUCTOR,
+                Expressions.field(
+                    Types.castIfNecessary(
+                        SplunkSchema.class, splunkTable.schema.getExpression()),
+                    "splunkConnection"),
+                Expressions.constant(search),
+                Expressions.constant(earliest),
+                Expressions.constant(latest),
+                fieldList == null
+                    ? Expressions.constant(null)
+                    : constantStringList(fieldList))).toBlock());
   }
 
   private static Expression constantStringList(final List<String> strings) {

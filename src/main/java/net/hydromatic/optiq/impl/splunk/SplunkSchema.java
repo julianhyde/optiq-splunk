@@ -19,13 +19,17 @@ package net.hydromatic.optiq.impl.splunk;
 
 import net.hydromatic.linq4j.*;
 import net.hydromatic.linq4j.expressions.Expression;
+
 import net.hydromatic.optiq.*;
+import net.hydromatic.optiq.Table;
 import net.hydromatic.optiq.impl.TableInSchemaImpl;
 import net.hydromatic.optiq.impl.java.JavaTypeFactory;
 import net.hydromatic.optiq.impl.splunk.search.SplunkConnection;
 
 import org.eigenbase.reltype.RelDataType;
 import org.eigenbase.reltype.RelDataTypeFactory;
+
+import com.google.common.collect.*;
 
 import java.lang.reflect.Type;
 import java.util.*;
@@ -38,18 +42,25 @@ public class SplunkSchema implements Schema {
   public static final String SPLUNK_TABLE_NAME = "splunk";
 
   public final QueryProvider queryProvider;
+  private final Schema parentSchema;
+  private final String name;
   public final SplunkConnection splunkConnection;
   private final JavaTypeFactory typeFactory;
   private final Expression expression;
   private final SplunkTable table;
-  private final List<TableInSchema> tableList;
+  private final Map<String, TableInSchema> tableMap;
 
+  /** Creates a SplunkSchema. */
   public SplunkSchema(
       QueryProvider queryProvider,
+      Schema parentSchema,
+      String name,
       SplunkConnection splunkConnection,
       JavaTypeFactory typeFactory,
       Expression expression) {
     this.queryProvider = queryProvider;
+    this.parentSchema = parentSchema;
+    this.name = name;
     this.splunkConnection = splunkConnection;
     this.typeFactory = typeFactory;
     this.expression = expression;
@@ -63,25 +74,34 @@ public class SplunkSchema implements Schema {
     final Type elementType = typeFactory.getJavaClass(rowType);
     this.table =
         new SplunkTable(elementType, rowType, this, SPLUNK_TABLE_NAME);
-    this.tableList =
-        Collections.<TableInSchema>singletonList(
-            new TableInSchemaImpl(this, "splunk", TableType.TABLE, table));
+    this.tableMap =
+        ImmutableMap.<String, TableInSchema>of(SPLUNK_TABLE_NAME,
+            new TableInSchemaImpl(this, SPLUNK_TABLE_NAME, TableType.TABLE,
+                table));
+  }
+
+  public Schema getParentSchema() {
+    return parentSchema;
+  }
+
+  public String getName() {
+    return name;
   }
 
   public Expression getExpression() {
     return expression;
   }
 
-  public Collection<TableInSchema> getTables() {
-    return tableList;
+  public Map<String, TableInSchema> getTables() {
+    return tableMap;
   }
 
   public JavaTypeFactory getTypeFactory() {
     return typeFactory;
   }
 
-  public List<TableFunction> getTableFunctions(String name) {
-    return Collections.emptyList();
+  public Collection<TableFunctionInSchema> getTableFunctions(String name) {
+    return ImmutableList.of();
   }
 
   public Table getTable(String name) {
@@ -94,8 +114,8 @@ public class SplunkSchema implements Schema {
     return queryProvider;
   }
 
-  public Map<String, List<TableFunction>> getTableFunctions() {
-    return Collections.emptyMap();
+  public Multimap<String, TableFunctionInSchema> getTableFunctions() {
+    return ImmutableMultimap.of();
   }
 
   public <T> Table<T> getTable(String name, Class<T> elementType) {

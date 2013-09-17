@@ -24,7 +24,6 @@ import net.hydromatic.optiq.*;
 
 import org.eigenbase.rel.RelNode;
 import org.eigenbase.relopt.RelOptTable;
-import org.eigenbase.relopt.RelOptUtil;
 import org.eigenbase.reltype.RelDataType;
 
 import java.lang.reflect.Type;
@@ -118,7 +117,7 @@ class SplunkTable<T>
         "search",
         null,
         null,
-        RelOptUtil.getFieldNameList(relOptTable.getRowType()));
+        relOptTable.getRowType().getFieldNames());
   }
 }
 

@@ -83,6 +83,8 @@ public class SplunkDriver extends UnregisteredDriver {
     final SplunkSchema schema =
         new SplunkSchema(
             optiqConnection,
+            rootSchema,
+            schemaName,
             splunkConnection,
             optiqConnection.getTypeFactory(),
             rootSchema.getSubSchemaExpression(

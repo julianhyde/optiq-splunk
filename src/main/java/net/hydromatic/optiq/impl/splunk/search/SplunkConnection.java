@@ -150,7 +150,7 @@ public class SplunkConnection {
     args.put("output_mode", "csv");
     args.put("preview", "0");
 
-    //TODO: remove this once the csv parser can handle leading spaces
+    // TODO: remove this once the csv parser can handle leading spaces
     args.put("check_connection", "0");
 
     appendURLEncodedArgs(data, args);
@@ -169,7 +169,8 @@ public class SplunkConnection {
     } catch (Exception e) {
       StringWriter sw = new StringWriter();
       e.printStackTrace(new PrintWriter(sw));
-      LOGGER.warning(e.getMessage() + "\n" + sw);
+      LOGGER.warning(e.getMessage() + "\n"
+          + sw);
       return srl == null ? Linq4j.emptyEnumerator() : null;
     }
   }
@@ -195,7 +196,8 @@ public class SplunkConnection {
     } catch (IOException ignore) {
       StringWriter sw = new StringWriter();
       ignore.printStackTrace(new PrintWriter(sw));
-      LOGGER.warning(ignore.getMessage() + "\n" + sw);
+      LOGGER.warning(ignore.getMessage() + "\n"
+          + sw);
     } finally {
       HttpUtils.close(csvr); // CSVReader closes the inputstream too
     }
@@ -365,7 +367,8 @@ public class SplunkConnection {
       } catch (IOException ignore) {
         StringWriter sw = new StringWriter();
         ignore.printStackTrace(new PrintWriter(sw));
-        LOGGER.warning(ignore.getMessage() + "\n" + sw);
+        LOGGER.warning(ignore.getMessage() + "\n"
+            + sw);
       } finally {
       }
     }
@@ -407,13 +410,22 @@ public class SplunkConnection {
       } catch (IOException ignore) {
         StringWriter sw = new StringWriter();
         ignore.printStackTrace(new PrintWriter(sw));
-        LOGGER.warning(ignore.getMessage() + "\n" + sw);
+        LOGGER.warning(ignore.getMessage() + "\n"
+            + sw);
       }
       return false;
     }
 
     public void reset() {
       throw new UnsupportedOperationException();
+    }
+
+    public void close() {
+      try {
+        csvReader.close();
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
     }
   }
 }
